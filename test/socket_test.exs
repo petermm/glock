@@ -5,8 +5,9 @@ defmodule Glock.SocketTest do
   setup do
     port = 8080
     path = "/ws"
+    host_that_does_not_exist = "host_does_not_exist.websocktest.org"
     start_supervised({MockSocket.Supervisor, port: port, path: path, source: self()})
-    [host: "localhost", port: port, path: path]
+    [host: "localhost", port: port, path: path, host_that_does_not_exist: host_that_does_not_exist]
   end
 
   describe "simple socket" do
@@ -33,6 +34,25 @@ defmodule Glock.SocketTest do
       end
 
       assert capture_log(start_and_wait) =~ "greetings"
+    end
+  end
+
+  describe "network/host not available" do
+    test "network/host down will reconnect", %{
+      port: port,
+      path: path,
+      host_that_does_not_exist: host_that_does_not_exist
+    } do
+      {:ok, client} =
+        start_supervised(
+          {SimpleSocket, host: host_that_does_not_exist, path: path, port: port}
+        )
+
+      Process.sleep(200)
+
+      current_function = Process.info(client) |> Keyword.get(:current_function)
+
+      assert current_function == {:gun, :await_up, 3}
     end
   end
 

@@ -96,14 +96,26 @@ defmodule Glock.Socket do
       @impl GenServer
       def handle_continue(:connect, conn) do
         {:ok, client} = :gun.open(conn.host, conn.port, conn.connect_opts)
-        {:ok, :http} = :gun.await_up(client)
 
-        Logger.info(fn ->
-          "Connected to #{conn.host}:#{conn.port} on process : #{inspect(client)}"
-        end)
+        case :gun.await_up(client) do
+          {:ok, :http} ->
+            Logger.info(fn ->
+              "Connected to #{conn.host}:#{conn.port} on process : #{inspect(client)}"
+            end)
 
-        {:noreply, %{conn | client: client, monitor: Process.monitor(client)},
-         {:continue, :upgrade}}
+            {:noreply, %{conn | client: client, monitor: Process.monitor(client)},
+             {:continue, :upgrade}}
+
+          error ->
+            Logger.warn(fn ->
+              "Error: Host/Network not reachable while trying to connect to #{conn.host}:#{
+                conn.port
+              } on process : #{inspect(client)}\nReason: #{inspect(error)}\nReconnecting"
+            end)
+
+            :gun.close(client)
+            {:noreply, %{conn | client: nil}, {:continue, :connect}}
+        end
       end
 
       @impl GenServer
